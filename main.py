@@ -4,6 +4,7 @@
 # !view [listname]
 # !delete [listname] [number]
 
+#TODO make lists choosable by index
 #TODO make error handling red and only one line, not stack trace, not crash the program
 #TODO separate out the code to different files
 #TODO make annotation that registers it into the command database
@@ -27,6 +28,8 @@
 # file sync interface
 # everything
 
+import shelve
+
 def parse_command(line):
     command = "help"
     options = []
@@ -47,15 +50,15 @@ def run_command(command, options, arguments):
 def get_function(name):
     return funcs[name]
 
-def repl():
+def repl(db):
     while True:
-        nice = raw_input("> ")
+        nice = input("> ")
         if not nice:
             continue
         try:
             run_command(*parse_command(nice))
         except KeyError:
-            raise TypeError("%s command not found" % nice)
+            print("%s command not found" % nice)
         except TypeError as e:
             print("ERROR-------------------- %s" % e)
 
@@ -78,27 +81,43 @@ def sub(a, b):
     return float(a) - float(b)
 
 #TODO make the parser general, as a dictionary with first class functions
-lists = {"movies": ['toy story']}
 @register("list", {"n":1}, 0)
 def todo(*args):
     if not args: return lists.keys()
-    if args[0] == "new":
-        lists[args[1]] = list()
-        print('created new list: %s' % args[1])
-    else:
-        if args[0] not in lists:
-            raise TypeError('unknown list %s' % args[0])
-        selected = args[0]
-        if len(args) == 1:
-            for i,x in enumerate(lists[selected]):
-                print('%d -- %s' % (i+1,x))
-            return 1
-        subcommand = args[1]
-        if subcommand == "add":
-            lists[selected].append(" ".join(args[2:]))
-            return lists[selected]
-    return args
+    selected = args[0]
+    if len(args) == 1:
+        for i,x in enumerate(lists[selected]):
+            print('%d -- %s' % (i+1,x))
+        return 1
+    subcommand = args[1]
+    if subcommand == "new":
+        lists[args[0]] = list()
+        return('created new list: %s' % args[0])
+    if args[0] not in lists:
+        raise TypeError('unknown list %s' % args[0])
+    if subcommand == "add":
+        lists[selected].append(" ".join(args[2:]))
+        return lists[selected]
+    if subcommand == "remove":
+        try:
+            n = int(args[2])
+            del lists[selected][n-1]
+        except IndexError as e:
+            return "index out of range"
+        except ValueError as e:
+            return str(e)
+        return lists[selected]
+
+    #should never reach
+    raise Exception('should never reach')
 
 
 print(funcs)
-repl()
+with shelve.open('db') as db:
+    if 'lists' not in db:
+        db['lists'] = {}
+    lists = db['lists']
+    try:
+        repl(db)
+    finally:
+        db['lists'] = lists
